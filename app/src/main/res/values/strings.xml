@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">اكتب لي</string>
+    <string name="emergency_message">أنا لا أسمع، من فضلك اكتب لي.</string>
+    <string name="emergency_subtitle">اضغط هنا للكتابة لي مباشرة وسأقرأ ردك</string>
+    <string name="nav_live">استماع مباشر</string>
+    <string name="nav_conversation">محادثة ثنائية</string>
+    <string name="nav_transcribe">تفريغ صوتي</string>
+    <string name="nav_history">السجل</string>
+    <string name="nav_settings">المظهر والخط</string>
+    <string name="start_listening">بدء الاستماع</string>
+    <string name="stop_listening">إيقاف الاستماع</string>
+    <string name="listening_status_active">يستمع الآن… تحدّث أمامي</string>
+    <string name="listening_status_idle">جاهز للاستماع. اضغط الزر للبدء</string>
+    <string name="clear_text">مسح النص</string>
+    <string name="copy_text">نسخ النص</string>
+    <string name="share_text">مشاركة</string>
+    <string name="save_text">حفظ في السجل</string>
+    <string name="text_copied">تم نسخ النص بنجاح</string>
+    <string name="text_saved">تم حفظ المحادثة في السجل</string>
+    <string name="flip_screen">قلب الشاشة للطرف الآخر</string>
+    <string name="speaker_label">المتحدث</string>
+    <string name="user_label">أنا (أصم/ضعيف السمع)</string>
+    <string name="type_reply_placeholder">اكتب ردك هنا ليظهر بخط كبير…</string>
+    <string name="send_reply">إظهار الرد</string>
+    <string name="font_size">حجم الخط</string>
+    <string name="color_theme">نمط الألوان والتباين</string>
+    <string name="vibration_alert">تنبيه بالاهتزاز عند الكلام</string>
+    <string name="screen_flash_alert">تنبيه بوميض الشاشة البصري</string>
+    <string name="pick_audio_file">اختيار ملف صوتي أو رسالة واتساب</string>
+    <string name="transcribing">جارٍ تحويل الصوت إلى نص…</string>
+    <string name="no_audio_selected">لم يتم تحديد أي ملف صوتي بعد</string>
+    <string name="whatsapp_instructions">طريقة تفريغ صوتيات واتساب: افتح واتساب > حدد الرسالة الصوتية > اختر مشاركة > اختر تطبيق اكتب لي</string>
+</resources>
