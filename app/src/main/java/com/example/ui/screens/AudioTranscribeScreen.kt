@@ -77,6 +77,7 @@ fun AudioTranscribeScreen(
     repository: TranscriptionRepository,
     preferences: AppPreferences,
     onIncomingUriConsumed: () -> Unit,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -107,7 +108,7 @@ fun AudioTranscribeScreen(
             errorMessage = null
             transcriptionText = ""
 
-            when (val result = transcriber.transcribeAudioUri(uri)) {
+            when (val result = transcriber.transcribeAudioUri(uri, userCustomApiKey = preferences.customApiKey)) {
                 is TranscriptionResult.Success -> {
                     transcriptionText = result.text
                     isTranscribing = false
@@ -227,6 +228,39 @@ fun AudioTranscribeScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Test sample audio button
+            Button(
+                onClick = {
+                    isTranscribing = true
+                    errorMessage = null
+                    transcriptionText = ""
+                    scope.launch {
+                        kotlinx.coroutines.delay(1000)
+                        transcriptionText = "«السلام عليكم، كيف حالك أخي الكريم؟ أرسلت لك هذا التسجيل الصوتي للتأكيد على موعدنا، أرجو أن تبلغني عندما تكون جاهزاً وشكراً لك.»"
+                        isTranscribing = false
+                        alertManager.triggerTranscriptionCompleteAlert(
+                            preferences.vibrationEnabled,
+                            preferences.screenFlashEnabled
+                        )
+                        snackbarHostState.showSnackbar("تم تفريغ الرسالة الصوتية النموذجية بنجاح!")
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("test_sample_audio_btn"),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppTheme.colors.cardBackground,
+                    contentColor = AppTheme.colors.primary
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.5f))
+            ) {
+                Text("تجربة تحويل رسالة واتساب نموذجية فوراً ⚡", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Selected Audio Info & Transcribe Trigger
@@ -303,14 +337,28 @@ fun AudioTranscribeScreen(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = ErrorColor.copy(alpha = 0.15f))
                 ) {
-                    Text(
-                        text = errorMessage ?: "",
-                        color = ErrorColor,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(14.dp),
-                        textAlign = TextAlign.Right
-                    )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = errorMessage ?: "",
+                            color = ErrorColor,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Right
+                        )
+                        if (errorMessage?.contains("Gemini API") == true) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = onNavigateToSettings,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AppTheme.colors.primary,
+                                    contentColor = AppTheme.colors.onPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("الانتقال إلى الإعدادات لإدخال المفتاح 🔑", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }

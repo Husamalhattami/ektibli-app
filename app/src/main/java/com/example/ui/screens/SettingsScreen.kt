@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +27,9 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
@@ -35,6 +41,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -42,11 +50,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -57,16 +67,31 @@ import com.example.data.ContrastTheme
 import com.example.data.PreferencesManager
 import com.example.service.HapticAndVisualAlertManager
 import com.example.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     preferencesManager: PreferencesManager,
     preferences: AppPreferences,
     alertManager: HapticAndVisualAlertManager,
+    onRequestOverlayPermission: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     var speakerNameInput by remember { mutableStateOf(preferences.defaultSpeakerName) }
+    var apiKeyInput by remember { mutableStateOf(preferences.customApiKey) }
+
+    val hasOverlayPermission = remember(preferences.floatingWidgetEnabled) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
+    }
 
     Box(
         modifier = modifier
@@ -89,7 +114,97 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 1. Font Size Section
+            // 1. Floating Widget over WhatsApp Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(2.dp, AppTheme.colors.primary, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBackground)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Layers, contentDescription = null, tint = AppTheme.colors.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "الزر العائم فوق واتساب",
+                                    color = AppTheme.colors.textPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "يظهر زر عائم فوق واتساب للتفريغ الفوري",
+                                    color = AppTheme.colors.textSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = preferences.floatingWidgetEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled && !hasOverlayPermission) {
+                                    onRequestOverlayPermission()
+                                }
+                                preferencesManager.setFloatingWidgetEnabled(enabled)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = AppTheme.colors.onPrimary,
+                                checkedTrackColor = AppTheme.colors.primary
+                            ),
+                            modifier = Modifier.testTag("floating_widget_switch")
+                        )
+                    }
+
+                    if (!hasOverlayPermission) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = onRequestOverlayPermission,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppTheme.colors.primary,
+                                contentColor = AppTheme.colors.onPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("منح إذن الظهور فوق التطبيقات ⚙️", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // WhatsApp voice notification detection button
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.surface,
+                            contentColor = AppTheme.colors.textPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.surfaceBorder)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("تفعيل رصد رسائل واتساب الصوتية", fontSize = 13.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 2. Font Size Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -199,7 +314,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Contrast Theme Section
+            // 3. Contrast Theme Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -272,7 +387,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. Tactile and Visual Alerts Section
+            // 4. Tactile and Visual Alerts Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -396,7 +511,97 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 4. Default Speaker Name
+            // 5. Custom Gemini API Key
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, AppTheme.colors.surfaceBorder, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBackground)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Key, contentDescription = null, tint = AppTheme.colors.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "مفتاح الذكاء الاصطناعي (Gemini API)",
+                            color = AppTheme.colors.textPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "اختياري: لتفريغ الصوتيات مباشرة بأعلى دقة، يمكنك إدخال مفتاح Gemini المجاني الخاص بك هنا.",
+                        color = AppTheme.colors.textSecondary,
+                        fontSize = 12.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        placeholder = { Text("أدخل مفتاح AI Studio هنا…") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = AppTheme.colors.textPrimary,
+                            unfocusedTextColor = AppTheme.colors.textPrimary,
+                            focusedBorderColor = AppTheme.colors.primary,
+                            unfocusedBorderColor = AppTheme.colors.surfaceBorder
+                        ),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                preferencesManager.setCustomApiKey(apiKeyInput)
+                                alertManager.triggerSoftTap()
+                                scope.launch { snackbarHostState.showSnackbar("تم حفظ مفتاح الذكاء الاصطناعي بنجاح") }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppTheme.colors.primary,
+                                contentColor = AppTheme.colors.onPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("حفظ المفتاح")
+                        }
+
+                        if (apiKeyInput.isNotBlank()) {
+                            Button(
+                                onClick = {
+                                    apiKeyInput = ""
+                                    preferencesManager.setCustomApiKey("")
+                                    alertManager.triggerSoftTap()
+                                    scope.launch { snackbarHostState.showSnackbar("تمت إزالة المفتاح") }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AppTheme.colors.surface,
+                                    contentColor = AppTheme.colors.textSecondary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.surfaceBorder)
+                            ) {
+                                Text("إلغاء")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 6. Default Speaker Name
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -439,7 +644,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 5. App Info Card
+            // 7. App Info Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -472,5 +677,12 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(30.dp))
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp)
+        )
     }
 }

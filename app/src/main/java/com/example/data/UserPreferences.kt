@@ -21,7 +21,10 @@ data class AppPreferences(
     val screenFlashEnabled: Boolean = true,
     val isBoldFont: Boolean = true,
     val languageCode: String = "ar-SA",
-    val defaultSpeakerName: String = "المتحدث"
+    val defaultSpeakerName: String = "المتحدث",
+    val customApiKey: String = "",
+    val floatingWidgetEnabled: Boolean = false,
+    val whatsappAlertsEnabled: Boolean = true
 )
 
 class PreferencesManager(context: Context) {
@@ -43,7 +46,10 @@ class PreferencesManager(context: Context) {
             screenFlashEnabled = prefs.getBoolean("screen_flash", true),
             isBoldFont = prefs.getBoolean("bold_font", true),
             languageCode = prefs.getString("language", "ar-SA") ?: "ar-SA",
-            defaultSpeakerName = prefs.getString("speaker_name", "المتحدث") ?: "المتحدث"
+            defaultSpeakerName = prefs.getString("speaker_name", "المتحدث") ?: "المتحدث",
+            customApiKey = prefs.getString("custom_api_key", "") ?: "",
+            floatingWidgetEnabled = prefs.getBoolean("floating_widget", false),
+            whatsappAlertsEnabled = prefs.getBoolean("whatsapp_alerts", true)
         )
     }
 
@@ -81,5 +87,21 @@ class PreferencesManager(context: Context) {
     fun setSpeakerName(name: String) {
         prefs.edit().putString("speaker_name", name).apply()
         _preferences.value = _preferences.value.copy(defaultSpeakerName = name)
+    }
+
+    fun setCustomApiKey(key: String) {
+        val trimmed = key.trim()
+        prefs.edit().putString("custom_api_key", trimmed).apply()
+        _preferences.value = _preferences.value.copy(customApiKey = trimmed)
+    }
+
+    fun setFloatingWidgetEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("floating_widget", enabled).apply()
+        _preferences.value = _preferences.value.copy(floatingWidgetEnabled = enabled)
+    }
+
+    fun setWhatsappAlertsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("whatsapp_alerts", enabled).apply()
+        _preferences.value = _preferences.value.copy(whatsappAlertsEnabled = enabled)
     }
 }

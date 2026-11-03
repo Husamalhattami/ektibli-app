@@ -82,7 +82,8 @@ fun MainScreen(
     repository: TranscriptionRepository,
     preferencesManager: PreferencesManager,
     incomingAudioUri: Uri?,
-    onIncomingUriConsumed: () -> Unit
+    onIncomingUriConsumed: () -> Unit,
+    onRequestOverlayPermission: () -> Unit
 ) {
     val preferences by preferencesManager.preferences.collectAsState()
     var currentTab by remember(incomingAudioUri) {
@@ -225,7 +226,8 @@ fun MainScreen(
                         alertManager = alertManager,
                         repository = repository,
                         preferences = preferences,
-                        onIncomingUriConsumed = onIncomingUriConsumed
+                        onIncomingUriConsumed = onIncomingUriConsumed,
+                        onNavigateToSettings = { currentTab = AppTab.SETTINGS }
                     )
                     AppTab.HISTORY -> HistoryScreen(
                         repository = repository,
@@ -235,7 +237,8 @@ fun MainScreen(
                     AppTab.SETTINGS -> SettingsScreen(
                         preferencesManager = preferencesManager,
                         preferences = preferences,
-                        alertManager = alertManager
+                        alertManager = alertManager,
+                        onRequestOverlayPermission = onRequestOverlayPermission
                     )
                 }
             }
