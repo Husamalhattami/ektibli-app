@@ -2,52 +2,74 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Yellow on Black (Gold standard for Deaf / Hard of Hearing & Low Vision High Contrast)
-val YellowContrastBg = Color(0xFF000000)
-val YellowContrastCard = Color(0xFF141414)
-val YellowContrastCardBorder = Color(0xFFFACC15)
-val YellowContrastText = Color(0xFFFDE047)
-val YellowContrastTextSecondary = Color(0xFFFEF08A)
-val YellowContrastPrimary = Color(0xFFFACC15)
-val YellowContrastOnPrimary = Color(0xFF000000)
+// ==========================================
+// Modern Professional Accounting Palette
+// ==========================================
 
-// OLED Dark (Crisp White on Deep Black)
-val OledDarkBg = Color(0xFF09090B)
-val OledDarkCard = Color(0xFF18181B)
-val OledDarkCardBorder = Color(0xFF3F3F46)
-val OledDarkText = Color(0xFFFAFAFA)
-val OledDarkTextSecondary = Color(0xFFA1A1AA)
-val OledDarkPrimary = Color(0xFF60A5FA)
-val OledDarkOnPrimary = Color(0xFF09090B)
+// Primary Brand Colors (Trustworthy Deep Slate Navy & Crisp Blue)
+val BrandNavy = Color(0xFF0F172A)
+val BrandNavyLight = Color(0xFF1E293B)
+val BrandBlue = Color(0xFF2563EB)
+val BrandBlueLight = Color(0xFF3B82F6)
+val BrandBlueBg = Color(0xFFEFF6FF)
 
-// Light High Contrast (Sharp Black on Pure White)
-val LightContrastBg = Color(0xFFFFFFFF)
-val LightContrastCard = Color(0xFFF4F4F5)
-val LightContrastCardBorder = Color(0xFF18181B)
-val LightContrastText = Color(0xFF09090B)
-val LightContrastTextSecondary = Color(0xFF3F3F46)
-val LightContrastPrimary = Color(0xFF2563EB)
-val LightContrastOnPrimary = Color(0xFFFFFFFF)
+// Financial Semantic Colors:
+// 1. Success / Sales / Cash In / Profits (Clean Emerald)
+val FintechEmerald = Color(0xFF059669)
+val FintechEmeraldLight = Color(0xFF10B981)
+val FintechEmeraldBg = Color(0xFFECFDF5)
+val FintechEmeraldBorder = Color(0xFFA7F3D0)
 
-// Navy Cyan
-val NavyBg = Color(0xFF0B132B)
-val NavyCard = Color(0xFF1C2541)
-val NavyCardBorder = Color(0xFF38BDF8)
-val NavyText = Color(0xFFF0F9FF)
-val NavyTextSecondary = Color(0xFFBAE6FD)
-val NavyPrimary = Color(0xFF38BDF8)
-val NavyOnPrimary = Color(0xFF0B132B)
+// 2. Expenses / Debts to Suppliers / Cash Out (Clean Crimson Rose)
+val FintechRose = Color(0xFFDC2626)
+val FintechRoseLight = Color(0xFFEF4444)
+val FintechRoseBg = Color(0xFFFEF2F2)
+val FintechRoseBorder = Color(0xFFFECACA)
 
-// Emerald Dark
-val EmeraldBg = Color(0xFF022C22)
-val EmeraldCard = Color(0xFF064E3B)
-val EmeraldCardBorder = Color(0xFF34D399)
-val EmeraldText = Color(0xFFECFDF5)
-val EmeraldTextSecondary = Color(0xFFA7F3D0)
-val EmeraldPrimary = Color(0xFF34D399)
-val EmeraldOnPrimary = Color(0xFF022C22)
+// 3. Customer Debts / Balances (Accounting Amber / Warm Gold)
+val FintechAmber = Color(0xFFD97706)
+val FintechAmberLight = Color(0xFFF59E0B)
+val FintechAmberBg = Color(0xFFFFFBEB)
+val FintechAmberBorder = Color(0xFFFDE68A)
 
-// Alert colors
-val AlertFlashColor = Color(0x66FDE047)
-val ErrorColor = Color(0xFFEF4444)
-val SuccessColor = Color(0xFF22C55E)
+// 4. E-Wallets / Banks / Exchange Accounts (Sapphire Indigo)
+val FintechIndigo = Color(0xFF4F46E5)
+val FintechIndigoLight = Color(0xFF6366F1)
+val FintechIndigoBg = Color(0xFFEEF2FF)
+val FintechIndigoBorder = Color(0xFFC7D2FE)
+
+// 5. Teal for Transfers & Settlements
+val FintechTeal = Color(0xFF0D9488)
+val FintechTealBg = Color(0xFFF0FDFA)
+
+// Neutral Surfaces & Typography
+val SlateBg = Color(0xFFF8FAFC)
+val SlateCard = Color(0xFFFFFFFF)
+val SlateBorder = Color(0xFFE2E8F0)
+val SlateBorderLight = Color(0xFFF1F5F9)
+val SlateTextPrimary = Color(0xFF0F172A)
+val SlateTextSecondary = Color(0xFF475569)
+val SlateTextMuted = Color(0xFF94A3B8)
+
+// Backward compatibility aliases
+val MidnightNavy = BrandNavy
+val DeepNavy = BrandNavyLight
+val LightNavy = Color(0xFF334155)
+val LuxuryGold = FintechAmber
+val LuxuryGoldLight = FintechAmberLight
+val GoldContainer = FintechAmberBg
+val EmeraldProfit = FintechEmerald
+val EmeraldLight = FintechEmeraldBg
+val RubyExpense = FintechRose
+val RubyLight = FintechRoseBg
+val SlateBackground = SlateBg
+val SlateSurface = SlateCard
+val SlateMuted = SlateTextSecondary
+val SlateHeader = SlateTextPrimary
+val OceanDeep = BrandBlue
+
+// Dark Palette
+val DarkBackground = Color(0xFF0B1120)
+val DarkSurface = Color(0xFF1E293B)
+val DarkCard = Color(0xFF1E293B)
+val DarkBorder = Color(0xFF334155)

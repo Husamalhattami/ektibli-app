@@ -1,203 +1,139 @@
 package com.example
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
-import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.activity.viewModels
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
-import com.example.data.AppDatabase
-import com.example.data.PreferencesManager
-import com.example.data.TranscriptionRepository
-import com.example.service.FloatingWidgetService
-import com.example.service.GeminiAudioTranscriber
-import com.example.service.HapticAndVisualAlertManager
-import com.example.service.SpeechRecognitionManager
-import com.example.ui.MainScreen
-import com.example.ui.theme.AppTheme
-import com.example.ui.theme.EktibliTheme
-import java.io.File
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.AppScreen
+import com.example.ui.StoreViewModel
+import com.example.ui.components.SaleReceiptDialog
+import com.example.ui.screens.*
+import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var database: AppDatabase
-    private lateinit var repository: TranscriptionRepository
-    private lateinit var alertManager: HapticAndVisualAlertManager
-    private lateinit var speechManager: SpeechRecognitionManager
-    private lateinit var transcriber: GeminiAudioTranscriber
-    private lateinit var preferencesManager: PreferencesManager
-
-    private var incomingSharedAudioUri by mutableStateOf<Uri?>(null)
+    private val viewModel: StoreViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        database = AppDatabase.getDatabase(this)
-        repository = TranscriptionRepository(database.transcriptionDao())
-        alertManager = HapticAndVisualAlertManager(this)
-        speechManager = SpeechRecognitionManager(this, alertManager)
-        transcriber = GeminiAudioTranscriber(this)
-        preferencesManager = PreferencesManager(this)
-
-        handleIntent(intent)
-
         setContent {
-            val preferences by preferencesManager.preferences.collectAsState()
+            MyApplicationTheme {
+                MainAppContent(viewModel = viewModel)
+            }
+        }
+    }
+}
 
-            // Request Audio & Notification Permissions
-            var hasAudioPermission by remember {
-                mutableStateOf(
-                    ContextCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
+@Composable
+fun MainAppContent(viewModel: StoreViewModel) {
+    val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
+    val completedReceipt by viewModel.completedReceipt.collectAsStateWithLifecycle()
+    val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // System Back button handling
+    BackHandler(enabled = currentScreen != AppScreen.HOME) {
+        viewModel.navigateBack()
+    }
+
+    // Show toast / snackbar on messages
+    LaunchedEffect(userMessage) {
+        userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        AnimatedContent(
+            targetState = currentScreen,
+            modifier = Modifier.padding(innerPadding),
+            transitionSpec = {
+                fadeIn() togetherWith fadeOut()
+            },
+            label = "ScreenTransition"
+        ) { screen ->
+            when (screen) {
+                AppScreen.HOME -> HomeScreen(
+                    viewModel = viewModel,
+                    onNavigate = { viewModel.navigateTo(it) }
+                )
+                AppScreen.SALE -> SaleScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.PURCHASE -> PurchaseScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.INVENTORY -> InventoryScreen(
+                    viewModel = viewModel,
+                    onNavigate = { viewModel.navigateTo(it) },
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.EXPENSES -> ExpensesScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.EMPLOYEES -> EmployeesScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.DEBTS -> DebtsScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.REPORTS -> ReportsScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.CASH_DRAWER -> CashDrawerScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.EXCHANGE_ACCOUNTS -> ExchangeAccountsScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.TRANSACTIONS_LOG -> TransactionsManagerScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.STORE_AUDIT -> StoreAuditScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
+                )
+                AppScreen.SETTINGS, AppScreen.AUDIT_LOGS -> SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { viewModel.navigateBack() }
                 )
             }
-
-            val permissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestMultiplePermissions()
-            ) { permissionsMap ->
-                hasAudioPermission = permissionsMap[Manifest.permission.RECORD_AUDIO] == true
-            }
-
-            LaunchedEffect(Unit) {
-                val neededPermissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                permissionLauncher.launch(neededPermissions.toTypedArray())
-            }
-
-            // Sync Floating widget service state with user preference
-            LaunchedEffect(preferences.floatingWidgetEnabled) {
-                if (preferences.floatingWidgetEnabled) {
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)) {
-                        startFloatingService()
-                    }
-                } else {
-                    stopFloatingService()
-                }
-            }
-
-            DisposableEffect(Unit) {
-                onDispose {
-                    speechManager.destroy()
-                }
-            }
-
-            EktibliTheme(contrastTheme = preferences.theme) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(AppTheme.colors.background)
-                ) {
-                    MainScreen(
-                        speechManager = speechManager,
-                        alertManager = alertManager,
-                        transcriber = transcriber,
-                        repository = repository,
-                        preferencesManager = preferencesManager,
-                        incomingAudioUri = incomingSharedAudioUri,
-                        onIncomingUriConsumed = { incomingSharedAudioUri = null },
-                        onRequestOverlayPermission = { requestOverlayPermission() }
-                    )
-                }
-            }
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleIntent(intent)
-    }
-
-    private fun handleIntent(intent: Intent?) {
-        if (intent == null) return
-        val action = intent.action
-
-        if (Intent.ACTION_SEND == action || Intent.ACTION_SEND_MULTIPLE == action || Intent.ACTION_VIEW == action) {
-            val rawUri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-            } ?: intent.data ?: if (intent.clipData != null && intent.clipData!!.itemCount > 0) {
-                intent.clipData!!.getItemAt(0).uri
-            } else null
-
-            if (rawUri != null) {
-                // Immediately cache the stream to private app storage to avoid permission expiration
-                val cachedUri = cacheSharedAudioUri(rawUri)
-                incomingSharedAudioUri = cachedUri
-                alertManager.triggerTranscriptionCompleteAlert(true, true)
-            }
-        }
-    }
-
-    private fun cacheSharedAudioUri(uri: Uri): Uri {
-        return try {
-            val cacheFile = File(cacheDir, "whatsapp_shared_${System.currentTimeMillis()}.ogg")
-            contentResolver.openInputStream(uri)?.use { input ->
-                cacheFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Uri.fromFile(cacheFile)
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error caching shared audio uri", e)
-            uri
-        }
-    }
-
-    private fun startFloatingService() {
-        try {
-            val intent = Intent(this, FloatingWidgetService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Failed to start floating service", e)
-        }
-    }
-
-    private fun stopFloatingService() {
-        try {
-            val intent = Intent(this, FloatingWidgetService::class.java)
-            stopService(intent)
-        } catch (_: Exception) {}
-    }
-
-    fun requestOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-        }
+    // Receipt Dialog when sale is completed
+    completedReceipt?.let { receipt ->
+        SaleReceiptDialog(
+            receipt = receipt,
+            onDismiss = { viewModel.dismissReceipt() }
+        )
     }
 }

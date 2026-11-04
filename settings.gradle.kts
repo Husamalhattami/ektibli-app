@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "اكتب لي"
+rootProject.name = "HesabiStore"
 
 include(":app")
