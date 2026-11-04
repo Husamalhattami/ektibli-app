@@ -319,5 +319,8 @@ interface StoreDao {
 
     @Update
     suspend fun updateStoreSettings(settings: StoreSettings)
+
+    @Query("DELETE FROM store_settings")
+    suspend fun deleteAllStoreSettings()
 }
 

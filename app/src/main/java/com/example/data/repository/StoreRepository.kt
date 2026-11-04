@@ -888,6 +888,8 @@ class StoreRepository(
         paidFromCash: Boolean,
         exchangeAccount: ExchangeAccount? = null
     ): Long {
+        require(amount > 0) { "يجب أن يكون مبلغ المصروف أكبر من الصفر." }
+        require(paidFromCash || exchangeAccount != null) { "يجب اختيار حساب الصراف عند دفع المصروف خارج الصندوق." }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -978,6 +980,8 @@ class StoreRepository(
         paidFromCashDrawer: Boolean,
         exchangeAccount: ExchangeAccount? = null
     ): Long {
+        require(amount > 0) { "يجب أن يكون مبلغ حركة الموظف أكبر من الصفر." }
+        require(paidFromCashDrawer || exchangeAccount != null || type == "خصم غياب") { "يجب اختيار مصدر الدفع لحركة الموظف." }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -1035,6 +1039,9 @@ class StoreRepository(
         paymentMethod: String = "نقداً", // "نقداً" or "صرافة/محفظة"
         exchangeAccount: ExchangeAccount? = null
     ): Long {
+        require(paymentAmount > 0) { "يجب أن يكون مبلغ السداد أكبر من الصفر." }
+        require(paymentAmount <= debt.remainingAmount + 0.001) { "مبلغ السداد أكبر من الدين المتبقي." }
+        require(paymentMethod == "نقداً" || exchangeAccount != null) { "يجب اختيار حساب الصراف عند السداد بالتحويل." }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -1216,7 +1223,11 @@ class StoreRepository(
         fromCashToExchange: Boolean,
         notes: String
     ) {
-        val account = dao.getExchangeAccountById(accountId) ?: return
+        require(amount > 0) { "يجب أن يكون مبلغ التحويل أكبر من الصفر." }
+        val account = dao.getExchangeAccountById(accountId) ?: throw IllegalArgumentException("حساب الصراف غير موجود.")
+        if (!fromCashToExchange) {
+            require(account.balance + 0.001 >= amount) { "الرصيد المتوفر في حساب الصراف لا يكفي لهذا السحب." }
+        }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -1316,6 +1327,7 @@ class StoreRepository(
     }
 
     suspend fun recordOwnerWithdrawal(amount: Double, reason: String) {
+        require(amount > 0) { "يجب أن يكون مبلغ السحب أكبر من الصفر." }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -1334,6 +1346,7 @@ class StoreRepository(
     }
 
     suspend fun recordManualDeposit(amount: Double, reason: String) {
+        require(amount > 0) { "يجب أن يكون مبلغ الإيداع أكبر من الصفر." }
         val activeShiftObj = dao.getActiveShift().firstOrNull()
         val shiftId = activeShiftObj?.id ?: 0L
         val now = System.currentTimeMillis()
@@ -1370,6 +1383,8 @@ class StoreRepository(
         dao.deleteAllEmployees()
         dao.deleteAllExchangeAccounts()
         dao.deleteAllParties()
+        dao.deleteAllAuditLogs()
+        dao.deleteAllStoreSettings()
     }
 
     suspend fun executeStoreFullAudit(
@@ -1438,185 +1453,85 @@ class StoreRepository(
         salesJson: JSONArray?,
         purchasesJson: JSONArray?,
         expensesJson: JSONArray?,
+        employeesJson: JSONArray?,
+        employeeTransactionsJson: JSONArray?,
         accountsJson: JSONArray?,
+        exchangeTransfersJson: JSONArray?,
         partiesJson: JSONArray?,
-        debtsJson: JSONArray?
+        debtsJson: JSONArray?,
+        debtPaymentsJson: JSONArray?,
+        shiftsJson: JSONArray?,
+        cashMovementsJson: JSONArray?,
+        auditLogsJson: JSONArray?,
+        settingsJson: JSONObject?
     ) {
         runInTransaction {
-            // 1. Wipe existing data
             clearEverythingCompletely()
+            fun JSONObject.longOrNull(key: String): Long? = if (isNull(key)) null else optLong(key)
+            fun JSONObject.doubleOrNull(key: String): Double? = if (isNull(key)) null else optDouble(key)
 
-            // 2. Restore Products
-            if (productsJson != null) {
-                for (i in 0 until productsJson.length()) {
-                    val obj = productsJson.getJSONObject(i)
-                    dao.insertProduct(
-                        ProductItem(
-                            category = obj.optString("category", "أخرى"),
-                            modelName = obj.optString("modelName", "صنف"),
-                            color = obj.optString("color", "عام"),
-                            size = obj.optString("size", "حر"),
-                            quantity = obj.optInt("quantity", 0),
-                            buyPrice = obj.optDouble("buyPrice", 0.0),
-                            sellPrice = obj.optDouble("sellPrice", 0.0),
-                            supplierName = obj.optString("supplierName", ""),
-                            purchaseDate = obj.optLong("purchaseDate", System.currentTimeMillis()),
-                            invoiceNumber = obj.optString("invoiceNumber", ""),
-                            barcode = obj.optString("barcode", ""),
-                            notes = obj.optString("notes", ""),
-                            unit = obj.optString("unit", ClothingUnits.PIECE),
-                            colorsCount = obj.optInt("colorsCount", 1),
-                            colorDetails = obj.optString("colorDetails", "")
-                        )
-                    )
-                }
-            }
+            productsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertProduct(ProductItem(
+                    id = o.optLong("id", 0L), category = o.optString("category", "أخرى"), modelName = o.optString("modelName", "صنف"), color = o.optString("color", "عام"), size = o.optString("size", "حر"),
+                    quantity = o.optInt("quantity", 0), buyPrice = o.optDouble("buyPrice", 0.0), sellPrice = o.optDouble("sellPrice", 0.0), supplierName = o.optString("supplierName", ""), purchaseDate = o.optLong("purchaseDate", System.currentTimeMillis()), invoiceNumber = o.optString("invoiceNumber", ""), barcode = o.optString("barcode", ""), notes = o.optString("notes", ""), lastSoldTimestamp = o.optLong("lastSoldTimestamp", 0L), unit = o.optString("unit", ClothingUnits.PIECE), colorsCount = o.optInt("colorsCount", 1), colorDetails = o.optString("colorDetails", "")
+                ))
+            }}
+            accountsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertExchangeAccount(ExchangeAccount(id = o.optLong("id", 0L), name = o.optString("name", "حساب"), accountNumber = o.optString("accountNumber", ""), phone = o.optString("phone", ""), balance = o.optDouble("balance", 0.0), type = o.optString("type", "صراف"), notes = o.optString("notes", ""), createdAt = o.optLong("createdAt", System.currentTimeMillis())))
+            }}
+            partiesJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertParty(PartyAccount(id = o.optLong("id", 0L), type = o.optString("type", "CUSTOMER"), name = o.optString("name", ""), phone = o.optString("phone", ""), address = o.optString("address", ""), notes = o.optString("notes", ""), initialBalance = o.optDouble("initialBalance", 0.0), createdAt = o.optLong("createdAt", System.currentTimeMillis())))
+            }}
+            employeesJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertEmployee(Employee(id = o.optLong("id", 0L), name = o.optString("name", ""), phone = o.optString("phone", ""), role = o.optString("role", "بائع"), startDate = o.optLong("startDate", System.currentTimeMillis()), baseSalary = o.optDouble("baseSalary", 0.0), salaryType = o.optString("salaryType", "شهري"), commissionPercent = o.optDouble("commissionPercent", 0.0), active = o.optBoolean("active", true)))
+            }}
+            shiftsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertShift(CashDrawerShift(id = o.optLong("id", 0L), openedAt = o.optLong("openedAt", System.currentTimeMillis()), closedAt = o.longOrNull("closedAt"), openingBalance = o.optDouble("openingBalance", 0.0), closingBalanceActual = o.doubleOrNull("closingBalanceActual"), isOpen = o.optBoolean("isOpen", true), cashierName = o.optString("cashierName", "صاحب المحل"), notes = o.optString("notes", "")))
+            }}
+            salesJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertSale(SaleTransaction(id = o.optLong("id", 0L), productId = o.optLong("productId", 0L), productName = o.optString("productName", ""), category = o.optString("category", ""), color = o.optString("color", ""), size = o.optString("size", ""), quantity = o.optInt("quantity", 1), unitBuyPrice = o.optDouble("unitBuyPrice", 0.0), unitSellPrice = o.optDouble("unitSellPrice", 0.0), discount = o.optDouble("discount", 0.0), totalAmount = o.optDouble("totalAmount", 0.0), profit = o.optDouble("profit", 0.0), customerName = o.optString("customerName", "زبون نقدي"), customerPhone = o.optString("customerPhone", ""), paymentType = o.optString("paymentType", "نقداً"), cashAmount = o.optDouble("cashAmount", 0.0), transferAmount = o.optDouble("transferAmount", 0.0), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", ""), transferRef = o.optString("transferRef", ""), employeeName = o.optString("employeeName", "صاحب المحل"), employeeId = o.optLong("employeeId", 0L), timestamp = o.optLong("timestamp", System.currentTimeMillis()), shiftId = o.optLong("shiftId", 0L), unit = o.optString("unit", ClothingUnits.PIECE)))
+            }}
+            purchasesJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertPurchase(PurchaseRecord(id = o.optLong("id", 0L), supplierName = o.optString("supplierName", "مورد"), category = o.optString("category", ""), modelName = o.optString("modelName", ""), color = o.optString("color", ""), size = o.optString("size", ""), quantity = o.optInt("quantity", 1), unitBuyPrice = o.optDouble("unitBuyPrice", 0.0), unitSellPrice = o.optDouble("unitSellPrice", 0.0), totalCost = o.optDouble("totalCost", 0.0), paidAmount = o.optDouble("paidAmount", 0.0), remainingDebt = o.optDouble("remainingDebt", 0.0), invoiceNumber = o.optString("invoiceNumber", ""), paymentMethod = o.optString("paymentMethod", "نقداً من الصندوق"), cashPaid = o.optDouble("cashPaid", 0.0), transferPaid = o.optDouble("transferPaid", 0.0), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis()), unit = o.optString("unit", ClothingUnits.PIECE), unitCount = o.optDouble("unitCount", 1.0), colorsCount = o.optInt("colorsCount", 1), notes = o.optString("notes", "")))
+            }}
+            expensesJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertExpense(ExpenseRecord(id = o.optLong("id", 0L), category = o.optString("category", "مصروف"), amount = o.optDouble("amount", 0.0), notes = o.optString("notes", ""), receiptNumber = o.optString("receiptNumber", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis()), paidFromCash = o.optBoolean("paidFromCash", true), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", ""), shiftId = o.optLong("shiftId", 0L)))
+            }}
+            employeeTransactionsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertEmployeeTransaction(EmployeeTransaction(id = o.optLong("id", 0L), employeeId = o.optLong("employeeId", 0L), employeeName = o.optString("employeeName", ""), type = o.optString("type", ""), amount = o.optDouble("amount", 0.0), notes = o.optString("notes", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis()), shiftId = o.optLong("shiftId", 0L), paidFromCash = o.optBoolean("paidFromCash", true), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", "")))
+            }}
+            debtsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertDebt(DebtRecord(id = o.optLong("id", 0L), type = o.optString("type", "CUSTOMER"), partyName = o.optString("partyName", ""), phone = o.optString("phone", ""), originalAmount = o.optDouble("originalAmount", 0.0), paidAmount = o.optDouble("paidAmount", 0.0), remainingAmount = o.optDouble("remainingAmount", 0.0), details = o.optString("details", ""), referenceSaleId = o.longOrNull("referenceSaleId"), referencePurchaseId = o.longOrNull("referencePurchaseId"), dueDate = o.optLong("dueDate", 0L), createdAt = o.optLong("createdAt", System.currentTimeMillis()), isSettled = o.optBoolean("isSettled", false)))
+            }}
+            debtPaymentsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertDebtPayment(DebtPayment(id = o.optLong("id", 0L), debtId = o.optLong("debtId", 0L), partyName = o.optString("partyName", ""), amount = o.optDouble("amount", 0.0), timestamp = o.optLong("timestamp", System.currentTimeMillis()), notes = o.optString("notes", ""), shiftId = o.optLong("shiftId", 0L), paymentMethod = o.optString("paymentMethod", "نقداً"), exchangeAccountId = o.optLong("exchangeAccountId", 0L)))
+            }}
+            cashMovementsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertCashMovement(CashDrawerMovement(id = o.optLong("id", 0L), shiftId = o.optLong("shiftId", 0L), type = o.optString("type", ""), amount = o.optDouble("amount", 0.0), isIncome = o.optBoolean("isIncome", true), title = o.optString("title", ""), details = o.optString("details", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis()), referenceSaleId = o.longOrNull("referenceSaleId"), referencePurchaseId = o.longOrNull("referencePurchaseId"), referenceExpenseId = o.longOrNull("referenceExpenseId"), referenceEmployeeTxId = o.longOrNull("referenceEmployeeTxId")))
+            }}
+            exchangeTransfersJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertExchangeTransfer(ExchangeTransfer(id = o.optLong("id", 0L), accountId = o.optLong("accountId", 0L), accountName = o.optString("accountName", ""), type = o.optString("type", ""), amount = o.optDouble("amount", 0.0), isCredit = o.optBoolean("isCredit", true), title = o.optString("title", ""), referenceNumber = o.optString("referenceNumber", ""), notes = o.optString("notes", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis())))
+            }}
+            auditLogsJson?.let { array -> for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                dao.insertAuditLog(AuditLogRecord(id = o.optLong("id", 0L), action = o.optString("action", "استعادة"), actor = o.optString("actor", "المدير"), details = o.optString("details", ""), timestamp = o.optLong("timestamp", System.currentTimeMillis())))
+            }}
+            settingsJson?.let { o -> dao.insertStoreSettings(StoreSettings(id = o.optInt("id", 1), shopNameAr = o.optString("shopNameAr", "محل الأناقة للملابس الرجالية"), shopNameEn = o.optString("shopNameEn", "Al-Anaqah Menswear"), phone = o.optString("phone", ""), address = o.optString("address", ""), currency = o.optString("currency", "ريال"), taxNumber = o.optString("taxNumber", ""), invoiceHeader = o.optString("invoiceHeader", ""), invoiceFooter = o.optString("invoiceFooter", ""), showProfitInReports = o.optBoolean("showProfitInReports", true), managerPin = o.optString("managerPin", ""), isManagerRole = o.optBoolean("isManagerRole", true))) }
 
-            // 3. Restore Exchange Accounts
-            if (accountsJson != null) {
-                for (i in 0 until accountsJson.length()) {
-                    val obj = accountsJson.getJSONObject(i)
-                    dao.insertExchangeAccount(
-                        ExchangeAccount(
-                            name = obj.optString("name", "حساب"),
-                            accountNumber = obj.optString("accountNumber", ""),
-                            phone = obj.optString("phone", ""),
-                            balance = obj.optDouble("balance", 0.0),
-                            type = obj.optString("type", "صراف"),
-                            notes = obj.optString("notes", "")
-                        )
-                    )
-                }
-            }
-
-            // 4. Restore Parties
-            if (partiesJson != null) {
-                for (i in 0 until partiesJson.length()) {
-                    val obj = partiesJson.getJSONObject(i)
-                    dao.insertParty(
-                        PartyAccount(
-                            type = obj.optString("type", "CUSTOMER"),
-                            name = obj.optString("name", ""),
-                            phone = obj.optString("phone", ""),
-                            address = obj.optString("address", ""),
-                            notes = obj.optString("notes", ""),
-                            initialBalance = obj.optDouble("initialBalance", 0.0)
-                        )
-                    )
-                }
-            }
-
-            // 5. Restore Debts
-            if (debtsJson != null) {
-                for (i in 0 until debtsJson.length()) {
-                    val obj = debtsJson.getJSONObject(i)
-                    dao.insertDebt(
-                        DebtRecord(
-                            type = obj.optString("type", "CUSTOMER"),
-                            partyName = obj.optString("partyName", ""),
-                            phone = obj.optString("phone", ""),
-                            originalAmount = obj.optDouble("originalAmount", 0.0),
-                            paidAmount = obj.optDouble("paidAmount", 0.0),
-                            remainingAmount = obj.optDouble("remainingAmount", 0.0),
-                            details = obj.optString("details", ""),
-                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                            isSettled = obj.optBoolean("isSettled", false)
-                        )
-                    )
-                }
-            }
-
-            // 6. Restore Sales
-            if (salesJson != null) {
-                for (i in 0 until salesJson.length()) {
-                    val obj = salesJson.getJSONObject(i)
-                    dao.insertSale(
-                        SaleTransaction(
-                            productId = obj.optLong("productId", 0L),
-                            productName = obj.optString("productName", ""),
-                            category = obj.optString("category", ""),
-                            color = obj.optString("color", ""),
-                            size = obj.optString("size", ""),
-                            quantity = obj.optInt("quantity", 1),
-                            unitBuyPrice = obj.optDouble("unitBuyPrice", 0.0),
-                            unitSellPrice = obj.optDouble("unitSellPrice", 0.0),
-                            discount = obj.optDouble("discount", 0.0),
-                            totalAmount = obj.optDouble("totalAmount", 0.0),
-                            profit = obj.optDouble("profit", 0.0),
-                            customerName = obj.optString("customerName", "زبون نقدي"),
-                            customerPhone = obj.optString("customerPhone", ""),
-                            paymentType = obj.optString("paymentType", "نقداً"),
-                            cashAmount = obj.optDouble("cashAmount", 0.0),
-                            transferAmount = obj.optDouble("transferAmount", 0.0),
-                            exchangeAccountId = obj.optLong("exchangeAccountId", 0L),
-                            exchangeAccountName = obj.optString("exchangeAccountName", ""),
-                            transferRef = obj.optString("transferRef", ""),
-                            employeeName = obj.optString("employeeName", "صاحب المحل"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            unit = obj.optString("unit", ClothingUnits.PIECE)
-                        )
-                    )
-                }
-            }
-
-            // 7. Restore Purchases
-            if (purchasesJson != null) {
-                for (i in 0 until purchasesJson.length()) {
-                    val obj = purchasesJson.getJSONObject(i)
-                    dao.insertPurchase(
-                        PurchaseRecord(
-                            supplierName = obj.optString("supplierName", "مورد"),
-                            category = obj.optString("category", ""),
-                            modelName = obj.optString("modelName", ""),
-                            color = obj.optString("color", ""),
-                            size = obj.optString("size", ""),
-                            quantity = obj.optInt("quantity", 1),
-                            unitBuyPrice = obj.optDouble("unitBuyPrice", 0.0),
-                            unitSellPrice = obj.optDouble("unitSellPrice", 0.0),
-                            totalCost = obj.optDouble("totalCost", 0.0),
-                            paidAmount = obj.optDouble("paidAmount", 0.0),
-                            remainingDebt = obj.optDouble("remainingDebt", 0.0),
-                            invoiceNumber = obj.optString("invoiceNumber", ""),
-                            paymentMethod = obj.optString("paymentMethod", "نقداً من الصندوق"),
-                            cashPaid = obj.optDouble("cashPaid", 0.0),
-                            transferPaid = obj.optDouble("transferPaid", 0.0),
-                            exchangeAccountId = obj.optLong("exchangeAccountId", 0L),
-                            exchangeAccountName = obj.optString("exchangeAccountName", ""),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            unit = obj.optString("unit", ClothingUnits.PIECE),
-                            unitCount = obj.optDouble("unitCount", 1.0)
-                        )
-                    )
-                }
-            }
-
-            // 8. Restore Expenses
-            if (expensesJson != null) {
-                for (i in 0 until expensesJson.length()) {
-                    val obj = expensesJson.getJSONObject(i)
-                    dao.insertExpense(
-                        ExpenseRecord(
-                            category = obj.optString("category", "مصروف"),
-                            amount = obj.optDouble("amount", 0.0),
-                            notes = obj.optString("notes", ""),
-                            receiptNumber = obj.optString("receiptNumber", ""),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            paidFromCash = obj.optBoolean("paidFromCash", true),
-                            exchangeAccountId = obj.optLong("exchangeAccountId", 0L),
-                            exchangeAccountName = obj.optString("exchangeAccountName", "")
-                        )
-                    )
-                }
-            }
-
-            dao.insertAuditLog(
-                AuditLogRecord(
-                    action = "استعادة نسخة احتياطية",
-                    actor = "المدير",
-                    details = "تمت استعادة البيانات بنجاح من ملف النسخة الاحتياطية",
-                    timestamp = System.currentTimeMillis()
-                )
-            )
+            dao.insertAuditLog(AuditLogRecord(action = "استعادة نسخة احتياطية", actor = "المدير", details = "تمت استعادة نسخة كاملة مع الحفاظ على المعرفات والعلاقات", timestamp = System.currentTimeMillis()))
         }
     }
 }
