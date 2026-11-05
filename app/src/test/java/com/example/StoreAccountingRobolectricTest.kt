@@ -216,8 +216,8 @@ class StoreAccountingRobolectricTest {
 
     @Test
     fun testMultiItemSaleUsesOneInvoiceAndOnePaymentMovement() = runBlocking {
-        val firstId = db.storeDao().insertProduct(ProductItem("ثوب", "ثوب 1", "أبيض", "M", 10, 50.0, 600.0))
-        val secondId = db.storeDao().insertProduct(ProductItem("قميص", "قميص 2", "أزرق", "L", 10, 30.0, 400.0))
+        val firstId = db.storeDao().insertProduct(ProductItem(category = "ثوب", modelName = "ثوب 1", color = "أبيض", size = "M", quantity = 10, buyPrice = 50.0, sellPrice = 600.0))
+        val secondId = db.storeDao().insertProduct(ProductItem(category = "قميص", modelName = "قميص 2", color = "أزرق", size = "L", quantity = 10, buyPrice = 30.0, sellPrice = 400.0))
         val first = db.storeDao().getProductById(firstId)!!
         val second = db.storeDao().getProductById(secondId)!!
         val accountId = db.storeDao().insertExchangeAccount(ExchangeAccount(name = "صراف الاختبار"))
@@ -251,8 +251,8 @@ class StoreAccountingRobolectricTest {
 
     @Test
     fun testMultiItemSaleRollsBackAllStockWhenOneLineFails() = runBlocking {
-        val firstId = db.storeDao().insertProduct(ProductItem("ثوب", "متاح", "أبيض", "M", 5, 50.0, 100.0))
-        val secondId = db.storeDao().insertProduct(ProductItem("قميص", "غير متاح", "أزرق", "L", 1, 30.0, 200.0))
+        val firstId = db.storeDao().insertProduct(ProductItem(category = "ثوب", modelName = "متاح", color = "أبيض", size = "M", quantity = 5, buyPrice = 50.0, sellPrice = 100.0))
+        val secondId = db.storeDao().insertProduct(ProductItem(category = "قميص", modelName = "غير متاح", color = "أزرق", size = "L", quantity = 1, buyPrice = 30.0, sellPrice = 200.0))
         val first = db.storeDao().getProductById(firstId)!!
         val second = db.storeDao().getProductById(secondId)!!
 
