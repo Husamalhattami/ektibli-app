@@ -48,7 +48,8 @@ fun HomeScreen(
     val cashMovements by viewModel.cashMovements.collectAsStateWithLifecycle()
     val storeSettings by viewModel.storeSettings.collectAsStateWithLifecycle()
 
-    val totalLiquidity = cashBalance + totalExchangeBalance + inventoryValue
+    // المخزون أصل محاسبي، لكنه ليس سيولة متاحة فوراً.
+    val availableLiquidity = cashBalance + totalExchangeBalance
 
     var showQuickAddSheet by remember { mutableStateOf(false) }
     var showAddPartyDialog by remember { mutableStateOf<String?>(null) } // "CUSTOMER" or "SUPPLIER"
@@ -150,7 +151,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "إجمالي السيولة",
+                                    text = "السيولة المتاحة فعلياً",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         color = Color(0xFFE2E8F0),
                                         fontSize = 14.sp,
@@ -171,7 +172,7 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = FormatUtils.formatNumber(totalLiquidity),
+                                    text = FormatUtils.formatNumber(availableLiquidity),
                                     style = MaterialTheme.typography.headlineLarge.copy(
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color.White,

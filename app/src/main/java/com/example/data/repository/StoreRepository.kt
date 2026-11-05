@@ -644,7 +644,7 @@ class StoreRepository(
             throw IllegalArgumentException("المبلغ المدفوع (${FormatUtils.formatCurrency(paidAmount)}) لا يمكن أن يتجاوز إجمالي الفاتورة (${FormatUtils.formatCurrency(totalCost)}).")
         }
 
-        if (paymentMethod == "تحويل عبر الصرافة" || paymentMethod == "تحويل صرافة") {
+        if (PaymentMethods.isTransfer(paymentMethod)) {
             if (exchangeAccount == null) {
                 throw IllegalArgumentException("يجب اختيار حساب الصراف أو المحفظة المدفوع منها قبل تأكيد الشراء.")
             }
@@ -676,7 +676,7 @@ class StoreRepository(
                 else -> 0.0
             }
             val finalTransferPaid = when (paymentMethod) {
-                "تحويل عبر الصرافة", "تحويل صرافة" -> paidAmount
+                PaymentMethods.TRANSFER -> paidAmount
                 "نصف كاش ونصف حوالة" -> transferPaidPart
                 else -> 0.0
             }

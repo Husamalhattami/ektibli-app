@@ -57,6 +57,7 @@ fun SaleScreen(
     val context = LocalContext.current
     val products by viewModel.products.collectAsStateWithLifecycle()
     val exchangeAccounts by viewModel.exchangeAccounts.collectAsStateWithLifecycle()
+    val employees by viewModel.employees.collectAsStateWithLifecycle()
     val parties by viewModel.parties.collectAsStateWithLifecycle()
     val customerParties = remember(parties) { parties.filter { it.type == "CUSTOMER" } }
     val storeSettings by viewModel.storeSettings.collectAsStateWithLifecycle()
@@ -76,6 +77,7 @@ fun SaleScreen(
     var customerName by remember { mutableStateOf("") }
     var customerPhone by remember { mutableStateOf("") }
     var selectedExchangeAccount by remember { mutableStateOf<ExchangeAccount?>(null) }
+    var selectedEmployee by remember { mutableStateOf<com.example.data.model.Employee?>(null) }
     var cashPaidAmount by remember { mutableStateOf(0.0) }
     var transferPaidAmount by remember { mutableStateOf(0.0) }
 
@@ -147,7 +149,7 @@ fun SaleScreen(
             customerName = finalCustomer,
             customerPhone = customerPhone,
             paymentType = paymentType,
-            employee = null,
+            employee = selectedEmployee,
             cashPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
             transferPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
             exchangeAccount = selectedExchangeAccount,
@@ -289,7 +291,7 @@ fun SaleScreen(
                         modifier = Modifier
                             .height(52.dp)
                             .clickable {
-                                viewModel.showMessage("تم تشغيل مسح الباركود للكاميرا")
+                                viewModel.showMessage("اكتب رقم الباركود في خانة البحث؛ مسح الكاميرا غير متاح حالياً")
                             }
                     ) {
                         Row(
@@ -298,7 +300,7 @@ fun SaleScreen(
                             modifier = Modifier.padding(horizontal = 12.dp)
                         ) {
                             Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                            Text("مسح باركود", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("بحث بالباركود", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -502,6 +504,24 @@ fun SaleScreen(
                                         label = { Text(party.name, fontSize = 11.sp) }
                                     )
                                 }
+                            }
+                        }
+
+                        Text("الموظف المنفذ للبيع:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = selectedEmployee == null,
+                                    onClick = { selectedEmployee = null },
+                                    label = { Text("صاحب المحل", fontSize = 11.sp) }
+                                )
+                            }
+                            items(employees) { employee ->
+                                FilterChip(
+                                    selected = selectedEmployee?.id == employee.id,
+                                    onClick = { selectedEmployee = employee },
+                                    label = { Text(employee.name, fontSize = 11.sp) }
+                                )
                             }
                         }
 
