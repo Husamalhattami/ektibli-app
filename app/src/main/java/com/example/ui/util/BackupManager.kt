@@ -20,7 +20,7 @@ object BackupManager {
         val root = JSONObject().apply {
             put("app", "HesabiStore")
             put("version", BACKUP_VERSION)
-            put("databaseVersion", 6)
+            put("databaseVersion", 7)
             put("timestamp", System.currentTimeMillis())
         }
 
@@ -133,7 +133,7 @@ object BackupManager {
         put("id", id); put("productId", productId); put("productName", productName); put("category", category); put("color", color); put("size", size)
         put("quantity", quantity); put("unitBuyPrice", unitBuyPrice); put("unitSellPrice", unitSellPrice); put("discount", discount); put("totalAmount", totalAmount); put("profit", profit)
         put("customerName", customerName); put("customerPhone", customerPhone); put("paymentType", paymentType); put("cashAmount", cashAmount); put("transferAmount", transferAmount)
-        put("exchangeAccountId", exchangeAccountId); put("exchangeAccountName", exchangeAccountName); put("transferRef", transferRef); put("employeeName", employeeName); put("employeeId", employeeId); put("timestamp", timestamp); put("shiftId", shiftId); put("unit", unit)
+        put("exchangeAccountId", exchangeAccountId); put("exchangeAccountName", exchangeAccountName); put("transferRef", transferRef); put("employeeName", employeeName); put("employeeId", employeeId); put("timestamp", timestamp); put("shiftId", shiftId); put("unit", unit); put("invoiceNumber", invoiceNumber)
     }
 
     private fun PurchaseRecord.toJson() = JSONObject().apply {

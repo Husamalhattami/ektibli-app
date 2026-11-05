@@ -50,7 +50,8 @@ data class SaleTransaction(
     val employeeId: Long = 0,
     val timestamp: Long = System.currentTimeMillis(),
     val shiftId: Long = 0,
-    val unit: String = "حبه" // حبه، نص درزن، درزن، كورجه
+    val unit: String = "حبه", // حبه، نص درزن، درزن، كورجه
+    val invoiceNumber: String = ""
 )
 
 @Entity(tableName = "purchases")
@@ -255,5 +256,16 @@ object PaymentMethods {
     const val CREDIT = "آجل (دين)"
 
     val ALL = listOf(CASH, TRANSFER, SPLIT, CREDIT)
+
+    fun isCash(value: String) = value == CASH || value == "نقداً"
+    fun isTransfer(value: String) = value == TRANSFER || value == "تحويل صرافة" || value == "تحويل عبر الصرافة"
+    fun isSplit(value: String) = value == SPLIT
+    fun isCredit(value: String) = value == CREDIT || value == "بالدين"
 }
 
+data class SaleLineInput(
+    val product: ProductItem,
+    val quantity: Int,
+    val sellPrice: Double,
+    val unit: String = "حبه"
+)

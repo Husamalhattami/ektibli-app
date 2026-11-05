@@ -213,4 +213,63 @@ class StoreAccountingRobolectricTest {
 
         assertTrue("يجب منع حذف فاتورة الشراء إذا تم بيع جزء من البضاعة حفاظاً على سلامة الحسابات", deletionBlocked)
     }
+
+    @Test
+    fun testMultiItemSaleUsesOneInvoiceAndOnePaymentMovement() = runBlocking {
+        val firstId = db.storeDao().insertProduct(ProductItem("ثوب", "ثوب 1", "أبيض", "M", 10, 50.0, 600.0))
+        val secondId = db.storeDao().insertProduct(ProductItem("قميص", "قميص 2", "أزرق", "L", 10, 30.0, 400.0))
+        val first = db.storeDao().getProductById(firstId)!!
+        val second = db.storeDao().getProductById(secondId)!!
+        val accountId = db.storeDao().insertExchangeAccount(ExchangeAccount(name = "صراف الاختبار"))
+        val account = db.storeDao().getExchangeAccountById(accountId)!!
+
+        val sales = repository.executeSaleCart(
+            lines = listOf(
+                SaleLineInput(first, 1, 600.0),
+                SaleLineInput(second, 1, 400.0)
+            ),
+            discount = 0.0,
+            customerName = "عميل الاختبار",
+            customerPhone = "0500000000",
+            paymentType = PaymentMethods.SPLIT,
+            employee = null,
+            cashPart = 500.0,
+            transferPart = 500.0,
+            exchangeAccount = account,
+            transferRef = "TR-1"
+        )
+
+        assertEquals(2, sales.size)
+        assertEquals(sales[0].invoiceNumber, sales[1].invoiceNumber)
+        assertEquals(500.0, sales.sumOf { it.cashAmount }, 0.01)
+        assertEquals(500.0, sales.sumOf { it.transferAmount }, 0.01)
+        assertEquals(1, db.storeDao().getAllCashMovements().firstOrNull()!!.count { it.type == "SALE_CASH" })
+        assertEquals(1, db.storeDao().getAllExchangeTransfers().firstOrNull()!!.count { it.type == "مبيعات تحويل" })
+        assertEquals(9, db.storeDao().getProductById(firstId)!!.quantity)
+        assertEquals(9, db.storeDao().getProductById(secondId)!!.quantity)
+    }
+
+    @Test
+    fun testMultiItemSaleRollsBackAllStockWhenOneLineFails() = runBlocking {
+        val firstId = db.storeDao().insertProduct(ProductItem("ثوب", "متاح", "أبيض", "M", 5, 50.0, 100.0))
+        val secondId = db.storeDao().insertProduct(ProductItem("قميص", "غير متاح", "أزرق", "L", 1, 30.0, 200.0))
+        val first = db.storeDao().getProductById(firstId)!!
+        val second = db.storeDao().getProductById(secondId)!!
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.executeSaleCart(
+                    lines = listOf(SaleLineInput(first, 1, 100.0), SaleLineInput(second, 2, 200.0)),
+                    discount = 0.0,
+                    customerName = "عميل",
+                    customerPhone = "",
+                    paymentType = PaymentMethods.CASH,
+                    employee = null
+                )
+            }
+        }
+        assertEquals(5, db.storeDao().getProductById(firstId)!!.quantity)
+        assertEquals(0, db.storeDao().getAllSales().firstOrNull()!!.size)
+        assertEquals(0, db.storeDao().getAllCashMovements().firstOrNull()!!.size)
+    }
 }

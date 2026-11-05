@@ -408,165 +408,159 @@ class StoreRepository(
         transferPart: Double = 0.0,
         exchangeAccount: ExchangeAccount? = null,
         transferRef: String = ""
-    ): SaleTransaction {
-        val multiplier = ClothingUnits.getMultiplier(unit)
-        val totalPieces = quantity * multiplier
+    ): SaleTransaction = executeSaleCart(
+        lines = listOf(SaleLineInput(product, quantity, sellPrice, unit)),
+        discount = discount,
+        customerName = customerName,
+        customerPhone = customerPhone,
+        paymentType = paymentType,
+        employee = employee,
+        cashPart = cashPart,
+        transferPart = transferPart,
+        exchangeAccount = exchangeAccount,
+        transferRef = transferRef
+    ).single()
 
-        // Strict Validation Checks
-        if (quantity <= 0) {
-            throw IllegalArgumentException("يرجى إدخال كمية بيع صحيحة أكبر من الصفر.")
-        }
-        if (sellPrice <= 0) {
-            throw IllegalArgumentException("لا يمكن بيع البضاعة بسعر صفري أو سالب.")
-        }
-        if (discount < 0) {
-            throw IllegalArgumentException("لا يمكن إدخال خصم بقيمة سالبة.")
-        }
-        val grossTotal = sellPrice * quantity
-        if (discount >= grossTotal) {
-            throw IllegalArgumentException("قيمة الخصم ($discount ريال) لا يمكن أن تتجاوز أو تعادل إجمالي البيع ($grossTotal ريال).")
-        }
-        val totalAmount = grossTotal - discount
+    /**
+     * Saves every line of a cart in one Room transaction. Payment movements and
+     * customer debt are deliberately recorded once for the invoice, not once per line.
+     */
+    suspend fun executeSaleCart(
+        lines: List<SaleLineInput>,
+        discount: Double,
+        customerName: String,
+        customerPhone: String,
+        paymentType: String,
+        employee: Employee?,
+        cashPart: Double = 0.0,
+        transferPart: Double = 0.0,
+        exchangeAccount: ExchangeAccount? = null,
+        transferRef: String = ""
+    ): List<SaleTransaction> {
+        require(lines.isNotEmpty()) { "سلة البيع فارغة." }
+        require(lines.all { it.quantity > 0 }) { "يجب أن تكون كمية كل منتج أكبر من الصفر." }
+        require(lines.all { it.sellPrice > 0 }) { "يجب أن يكون سعر كل منتج أكبر من الصفر." }
+        require(discount >= 0) { "لا يمكن إدخال خصم بقيمة سالبة." }
 
-        if (paymentType == "آجل (دين)" || paymentType == "بالدين") {
-            if (customerName.trim().isBlank()) {
-                throw IllegalArgumentException("يجب كتابة أو اختيار اسم العميل لتسجيل عملية البيع بالدين.")
-            }
+        val subtotal = lines.sumOf { it.sellPrice * it.quantity }
+        require(subtotal > 0) { "إجمالي الفاتورة يجب أن يكون أكبر من الصفر." }
+        require(discount < subtotal) { "الخصم يجب أن يكون أقل من إجمالي الفاتورة." }
+        val totalAmount = subtotal - discount
+        val isCash = PaymentMethods.isCash(paymentType)
+        val isTransfer = PaymentMethods.isTransfer(paymentType)
+        val isSplit = PaymentMethods.isSplit(paymentType)
+        val isCredit = PaymentMethods.isCredit(paymentType)
+        require(isCash || isTransfer || isSplit || isCredit) { "طريقة دفع غير معروفة." }
+        require(!isCredit || customerName.isNotBlank()) { "يجب كتابة اسم العميل للبيع الآجل." }
+        require(!(isTransfer || isSplit) || exchangeAccount != null) { "يجب اختيار حساب الصراف أو المحفظة." }
+
+        val finalCash = when {
+            isCash -> totalAmount
+            isSplit -> cashPart
+            else -> 0.0
         }
-        if (paymentType == "تحويل عبر الصراف" || paymentType == "تحويل صرافة") {
-            if (exchangeAccount == null) {
-                throw IllegalArgumentException("يجب اختيار حساب الصراف أو المحفظة المحول إليها قبل تأكيد البيع.")
-            }
+        val finalTransfer = when {
+            isTransfer -> totalAmount
+            isSplit -> transferPart
+            else -> 0.0
         }
-        if (paymentType == "نصف كاش ونصف حوالة") {
-            if (exchangeAccount == null) {
-                throw IllegalArgumentException("يجب اختيار حساب الصراف للدفعة المحولة.")
-            }
-            if (kotlin.math.abs((cashPart + transferPart) - totalAmount) > 1.0) {
-                throw IllegalArgumentException("مجموع الدفع النقدي ($cashPart) والتحويل ($transferPart) يجب أن يعادل إجمالي الفاتورة ($totalAmount ريال).")
-            }
+        if (isSplit) {
+            require(finalCash > 0 && finalTransfer > 0) { "يجب إدخال مبلغ الكاش والتحويل في الدفع المختلط." }
+        }
+        require(kotlin.math.abs(finalCash + finalTransfer + (if (isCredit) totalAmount else 0.0) - totalAmount) <= 0.01) {
+            "مجموع مبالغ الدفع لا يساوي إجمالي الفاتورة."
         }
 
         return runInTransaction {
-            val freshProduct = dao.getProductById(product.id)
-                ?: throw IllegalStateException("الصنف المطلوب بيعه غير موجود في المخزون!")
-
-            if (freshProduct.quantity < totalPieces) {
-                throw IllegalStateException("الكمية المطلوبة ($totalPieces حبة) غير متوفرة! المتبقي في المخزن فقط (${freshProduct.quantity} حبة).")
-            }
-
-            val updatedRows = dao.decrementStockSafe(product.id, totalPieces, System.currentTimeMillis())
-            if (updatedRows == 0) {
-                throw IllegalStateException("تعذر خصم الكمية من المخزون بسبب عدم كفاية الرصيد أو حدوث حركة متزامنة!")
-            }
-
-            val activeShiftObj = dao.getActiveShift().firstOrNull()
-            val shiftId = activeShiftObj?.id ?: 0L
             val now = System.currentTimeMillis()
-
-            val costOfGoods = freshProduct.buyPrice * totalPieces
-            val profit = totalAmount - costOfGoods
-
-            val finalCashAmount = when (paymentType) {
-                "نقداً", "نقداً (كاش)" -> totalAmount
-                "نصف كاش ونصف حوالة" -> cashPart
-                else -> 0.0
+            val invoiceNumber = "INV-$now"
+            val activeShift = dao.getActiveShift().firstOrNull()
+            val shiftId = activeShift?.id ?: 0L
+            val freshProducts = lines.map { line ->
+                dao.getProductById(line.product.id)
+                    ?: throw IllegalStateException("المنتج ${line.product.modelName} غير موجود.")
             }
-            val finalTransferAmount = when (paymentType) {
-                "تحويل عبر الصراف", "تحويل صرافة" -> totalAmount
-                "نصف كاش ونصف حوالة" -> transferPart
-                else -> 0.0
+            freshProducts.forEachIndexed { index, fresh ->
+                val requiredPieces = lines[index].quantity * ClothingUnits.getMultiplier(lines[index].unit)
+                if (fresh.quantity < requiredPieces) {
+                    throw IllegalStateException("المنتج ${fresh.modelName}: الكمية المطلوبة $requiredPieces، والمتوفر ${fresh.quantity}.")
+                }
+                if (dao.decrementStockSafe(fresh.id, requiredPieces, now) == 0) {
+                    throw IllegalStateException("تعذر خصم مخزون المنتج ${fresh.modelName} بسبب حركة متزامنة.")
+                }
             }
 
-            val sale = SaleTransaction(
-                productId = product.id,
-                productName = product.modelName,
-                category = product.category,
-                color = product.color,
-                size = product.size,
-                quantity = totalPieces,
-                unitBuyPrice = freshProduct.buyPrice,
-                unitSellPrice = sellPrice / multiplier,
-                discount = discount,
-                totalAmount = totalAmount,
-                profit = profit,
-                customerName = customerName.ifBlank { "زبون نقدي" },
-                customerPhone = customerPhone,
-                paymentType = paymentType,
-                cashAmount = finalCashAmount,
-                transferAmount = finalTransferAmount,
-                exchangeAccountId = exchangeAccount?.id ?: 0L,
-                exchangeAccountName = exchangeAccount?.name ?: "",
-                transferRef = transferRef,
-                employeeName = employee?.name ?: "صاحب المحل",
-                employeeId = employee?.id ?: 0L,
-                timestamp = now,
-                shiftId = shiftId,
-                unit = unit
-            )
-            val saleId = dao.insertSale(sale)
-
-            val unitDesc = if (unit == ClothingUnits.PIECE) "$quantity حبة" else "$quantity $unit ($totalPieces حبة)"
-
-            if (finalCashAmount > 0) {
-                dao.insertCashMovement(
-                    CashDrawerMovement(
-                        shiftId = shiftId,
-                        type = "SALE_CASH",
-                        amount = finalCashAmount,
-                        isIncome = true,
-                        title = "مبيعات نقدية: ${product.modelName} ($unitDesc)",
-                        details = "الزبون: ${customerName.ifBlank { "نقدي" }}${if (finalTransferAmount > 0) " (جزء نقدي)" else ""}",
-                        timestamp = now,
-                        referenceSaleId = saleId
-                    )
+            val saved = mutableListOf<SaleTransaction>()
+            var allocatedDiscount = 0.0
+            lines.forEachIndexed { index, line ->
+                val fresh = freshProducts[index]
+                val gross = line.sellPrice * line.quantity
+                val lineDiscount = if (index == lines.lastIndex) discount - allocatedDiscount else discount * gross / subtotal
+                allocatedDiscount += lineDiscount
+                val lineTotal = gross - lineDiscount
+                val pieces = line.quantity * ClothingUnits.getMultiplier(line.unit)
+                val sale = SaleTransaction(
+                    productId = fresh.id,
+                    productName = fresh.modelName,
+                    category = fresh.category,
+                    color = fresh.color,
+                    size = fresh.size,
+                    quantity = pieces,
+                    unitBuyPrice = fresh.buyPrice,
+                    unitSellPrice = line.sellPrice / ClothingUnits.getMultiplier(line.unit),
+                    discount = lineDiscount,
+                    totalAmount = lineTotal,
+                    profit = lineTotal - fresh.buyPrice * pieces,
+                    customerName = customerName.ifBlank { "زبون نقدي" },
+                    customerPhone = customerPhone,
+                    paymentType = paymentType,
+                    cashAmount = if (index == 0) finalCash else 0.0,
+                    transferAmount = if (index == 0) finalTransfer else 0.0,
+                    exchangeAccountId = exchangeAccount?.id ?: 0L,
+                    exchangeAccountName = exchangeAccount?.name ?: "",
+                    transferRef = transferRef,
+                    employeeName = employee?.name ?: "صاحب المحل",
+                    employeeId = employee?.id ?: 0L,
+                    timestamp = now,
+                    shiftId = shiftId,
+                    unit = line.unit,
+                    invoiceNumber = invoiceNumber
                 )
+                saved += sale.copy(id = dao.insertSale(sale))
             }
 
-            if (finalTransferAmount > 0 && exchangeAccount != null) {
-                dao.updateExchangeBalance(exchangeAccount.id, finalTransferAmount)
-                dao.insertExchangeTransfer(
-                    ExchangeTransfer(
-                        accountId = exchangeAccount.id,
-                        accountName = exchangeAccount.name,
-                        type = "مبيعات تحويل",
-                        amount = finalTransferAmount,
-                        isCredit = true,
-                        title = "مبيعات تحويل: ${product.modelName} ($unitDesc)",
-                        referenceNumber = transferRef,
-                        notes = "فاتورة بيع #${saleId} | الزبون: ${customerName.ifBlank { "تحويل" }}",
-                        timestamp = now
-                    )
-                )
+            val first = saved.first()
+            if (finalCash > 0) {
+                dao.insertCashMovement(CashDrawerMovement(
+                    shiftId = shiftId, type = "SALE_CASH", amount = finalCash, isIncome = true,
+                    title = "مبيعات نقدية: فاتورة $invoiceNumber",
+                    details = "الزبون: ${customerName.ifBlank { "نقدي" }}",
+                    timestamp = now, referenceSaleId = first.id
+                ))
             }
-
-            if (paymentType == "آجل (دين)" || paymentType == "بالدين") {
-                val debt = DebtRecord(
-                    type = "CUSTOMER",
-                    partyName = customerName.ifBlank { "زبون آجل" },
-                    phone = customerPhone,
-                    originalAmount = totalAmount,
-                    paidAmount = 0.0,
-                    remainingAmount = totalAmount,
-                    details = "فاتورة بيع آجل: ${product.modelName} ($unitDesc)",
-                    referenceSaleId = saleId,
-                    dueDate = now + 86400000L * 15,
-                    createdAt = now,
-                    isSettled = false
-                )
-                dao.insertDebt(debt)
+            if (finalTransfer > 0 && exchangeAccount != null) {
+                dao.updateExchangeBalance(exchangeAccount.id, finalTransfer)
+                dao.insertExchangeTransfer(ExchangeTransfer(
+                    accountId = exchangeAccount.id, accountName = exchangeAccount.name,
+                    type = "مبيعات تحويل", amount = finalTransfer, isCredit = true,
+                    title = "مبيعات تحويل: فاتورة $invoiceNumber", referenceNumber = transferRef,
+                    notes = "الزبون: ${customerName.ifBlank { "تحويل" }}", timestamp = now
+                ))
             }
-
-            dao.insertAuditLog(
-                AuditLogRecord(
-                    action = "تسجيل بيع",
-                    actor = employee?.name ?: "صاحب المحل",
-                    details = "فاتورة بيع #${saleId}: ${product.modelName} ($unitDesc) بقيمة ${FormatUtils.formatCurrency(totalAmount)} ($paymentType)",
-                    timestamp = now
-                )
-            )
-
-            sale.copy(id = saleId)
+            if (isCredit) {
+                dao.insertDebt(DebtRecord(
+                    type = "CUSTOMER", partyName = customerName, phone = customerPhone,
+                    originalAmount = totalAmount, remainingAmount = totalAmount,
+                    details = "فاتورة بيع آجل $invoiceNumber", referenceSaleId = first.id,
+                    dueDate = now + 86400000L * 15, createdAt = now, isSettled = false
+                ))
+            }
+            dao.insertAuditLog(AuditLogRecord(
+                action = "تسجيل بيع", actor = employee?.name ?: "صاحب المحل",
+                details = "فاتورة $invoiceNumber تحتوي ${saved.size} منتجاً بإجمالي ${FormatUtils.formatCurrency(totalAmount)}",
+                timestamp = now
+            ))
+            saved
         }
     }
 
@@ -1495,7 +1489,7 @@ class StoreRepository(
             }}
             salesJson?.let { array -> for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
-                dao.insertSale(SaleTransaction(id = o.optLong("id", 0L), productId = o.optLong("productId", 0L), productName = o.optString("productName", ""), category = o.optString("category", ""), color = o.optString("color", ""), size = o.optString("size", ""), quantity = o.optInt("quantity", 1), unitBuyPrice = o.optDouble("unitBuyPrice", 0.0), unitSellPrice = o.optDouble("unitSellPrice", 0.0), discount = o.optDouble("discount", 0.0), totalAmount = o.optDouble("totalAmount", 0.0), profit = o.optDouble("profit", 0.0), customerName = o.optString("customerName", "زبون نقدي"), customerPhone = o.optString("customerPhone", ""), paymentType = o.optString("paymentType", "نقداً"), cashAmount = o.optDouble("cashAmount", 0.0), transferAmount = o.optDouble("transferAmount", 0.0), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", ""), transferRef = o.optString("transferRef", ""), employeeName = o.optString("employeeName", "صاحب المحل"), employeeId = o.optLong("employeeId", 0L), timestamp = o.optLong("timestamp", System.currentTimeMillis()), shiftId = o.optLong("shiftId", 0L), unit = o.optString("unit", ClothingUnits.PIECE)))
+                dao.insertSale(SaleTransaction(id = o.optLong("id", 0L), productId = o.optLong("productId", 0L), productName = o.optString("productName", ""), category = o.optString("category", ""), color = o.optString("color", ""), size = o.optString("size", ""), quantity = o.optInt("quantity", 1), unitBuyPrice = o.optDouble("unitBuyPrice", 0.0), unitSellPrice = o.optDouble("unitSellPrice", 0.0), discount = o.optDouble("discount", 0.0), totalAmount = o.optDouble("totalAmount", 0.0), profit = o.optDouble("profit", 0.0), customerName = o.optString("customerName", "زبون نقدي"), customerPhone = o.optString("customerPhone", ""), paymentType = o.optString("paymentType", "نقداً"), cashAmount = o.optDouble("cashAmount", 0.0), transferAmount = o.optDouble("transferAmount", 0.0), exchangeAccountId = o.optLong("exchangeAccountId", 0L), exchangeAccountName = o.optString("exchangeAccountName", ""), transferRef = o.optString("transferRef", ""), employeeName = o.optString("employeeName", "صاحب المحل"), employeeId = o.optLong("employeeId", 0L), timestamp = o.optLong("timestamp", System.currentTimeMillis()), shiftId = o.optLong("shiftId", 0L), unit = o.optString("unit", ClothingUnits.PIECE), invoiceNumber = o.optString("invoiceNumber", "")))
             }}
             purchasesJson?.let { array -> for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)

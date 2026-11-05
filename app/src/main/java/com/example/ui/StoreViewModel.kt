@@ -223,6 +223,47 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun executeSaleCart(
+        lines: List<SaleLineInput>,
+        discount: Double,
+        customerName: String,
+        customerPhone: String,
+        paymentType: String,
+        employee: Employee?,
+        cashPart: Double = 0.0,
+        transferPart: Double = 0.0,
+        exchangeAccount: ExchangeAccount? = null,
+        transferRef: String = "",
+        onSuccess: (List<SaleTransaction>) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val sales = repository.executeSaleCart(
+                    lines = lines,
+                    discount = discount,
+                    customerName = customerName,
+                    customerPhone = customerPhone,
+                    paymentType = paymentType,
+                    employee = employee,
+                    cashPart = cashPart,
+                    transferPart = transferPart,
+                    exchangeAccount = exchangeAccount,
+                    transferRef = transferRef
+                )
+                val first = sales.first()
+                _completedReceipt.value = CompletedSaleReceipt(
+                    sale = first,
+                    dateStr = FormatUtils.formatDate(first.timestamp),
+                    timeStr = FormatUtils.formatTime(first.timestamp)
+                )
+                _userMessage.value = "تم إتمام عملية البيع بنجاح!"
+                onSuccess(sales)
+            } catch (e: Exception) {
+                _userMessage.value = e.message ?: "تعذر إتمام عملية البيع"
+            }
+        }
+    }
+
     fun deleteSale(saleId: Long) {
         viewModelScope.launch {
             try {
