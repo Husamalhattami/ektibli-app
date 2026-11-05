@@ -43,6 +43,13 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
+      - name: Verify toolchain
+        run: |
+          java -version
+          javac -version
+          ./gradlew --version
+      - name: Run unit tests and lint
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
 

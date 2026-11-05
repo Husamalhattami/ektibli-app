@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,7 +51,7 @@ fun SettingsScreen(
     var taxNumber by remember(settingsState) { mutableStateOf(settingsState?.taxNumber ?: "") }
     var invoiceHeader by remember(settingsState) { mutableStateOf(settingsState?.invoiceHeader ?: "أهلاً وسهلاً بكم في محل الأناقة للملابس الرجالية") }
     var invoiceFooter by remember(settingsState) { mutableStateOf(settingsState?.invoiceFooter ?: "البضاعة المباعة ترد وتستبدل خلال 3 أيام بشرط وجود الفاتورة وبحالتها الأصلية") }
-    var managerPin by remember(settingsState) { mutableStateOf(settingsState?.managerPin ?: "1234") }
+    var managerPin by remember(settingsState) { mutableStateOf(settingsState?.managerPin ?: "") }
 
     var showRestoreDialog by remember { mutableStateOf(false) }
     var restoreJsonInput by remember { mutableStateOf("") }
@@ -215,13 +217,19 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = managerPin,
                             onValueChange = { managerPin = it },
-                            label = { Text("رمز PIN للمدير") },
+                            label = { Text("رمز PIN للمدير (4 أرقام على الأقل)") },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
                         )
 
                         Button(
                             onClick = {
+                                if (managerPin.trim().length < 4 || !managerPin.trim().all { it.isDigit() }) {
+                                    Toast.makeText(context, "يجب إدخال PIN رقمي من 4 أرقام على الأقل", Toast.LENGTH_LONG).show()
+                                    return@Button
+                                }
                                 val updated = StoreSettings(
                                     id = 1,
                                     shopNameAr = storeName.trim().ifBlank { "محل الأناقة" },
@@ -232,7 +240,7 @@ fun SettingsScreen(
                                     taxNumber = taxNumber.trim(),
                                     invoiceHeader = invoiceHeader.trim(),
                                     invoiceFooter = invoiceFooter.trim(),
-                                    managerPin = managerPin.trim().ifBlank { "1234" }
+                                    managerPin = managerPin.trim()
                                 )
                                 viewModel.saveSettings(updated)
                             },

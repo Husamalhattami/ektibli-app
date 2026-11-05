@@ -240,7 +240,7 @@ data class StoreSettings(
     val invoiceHeader: String = "أهلاً وسهلاً بكم في محل الأناقة للملابس الرجالية",
     val invoiceFooter: String = "البضاعة المباعة ترد وتستبدل خلال 3 أيام بشرط وجود الفاتورة وبحالتها الأصلية.",
     val showProfitInReports: Boolean = true,
-    val managerPin: String = "1234",
+    val managerPin: String = "",
     val isManagerRole: Boolean = true
 ) {
     val storeName: String get() = shopNameAr

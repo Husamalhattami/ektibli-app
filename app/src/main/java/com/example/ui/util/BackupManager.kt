@@ -216,6 +216,10 @@ object BackupManager {
             if (!root.has("app") || root.getString("app") != "HesabiStore") {
                 return false
             }
+            val version = root.optInt("version", 0)
+            if (version !in 1..7) return false
+            val requiredCollections = listOf("products", "sales", "purchases", "expenses", "exchangeAccounts", "parties", "debts")
+            if (requiredCollections.any { !root.has(it) || root.optJSONArray(it) == null }) return false
 
             // Restore inside transactional flow
             repository.restoreFullData(

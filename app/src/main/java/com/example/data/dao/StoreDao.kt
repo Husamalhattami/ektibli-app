@@ -20,7 +20,7 @@ interface StoreDao {
     @Update
     suspend fun updateProduct(product: ProductItem)
 
-    @Query("UPDATE products SET quantity = :newQty, lastSoldTimestamp = :soldTime WHERE id = :productId")
+    @Query("UPDATE products SET quantity = :newQty, lastSoldTimestamp = :soldTime WHERE id = :productId AND :newQty >= 0")
     suspend fun updateStock(productId: Long, newQty: Int, soldTime: Long)
 
     @Query("DELETE FROM products WHERE id = :id")
@@ -291,10 +291,10 @@ interface StoreDao {
     fun getPurchasesBySupplierName(supplierName: String): Flow<List<PurchaseRecord>>
 
     // --- Safe Stock Operations ---
-    @Query("UPDATE products SET quantity = quantity - :qtySold, lastSoldTimestamp = :soldTime WHERE id = :productId AND quantity >= :qtySold")
+    @Query("UPDATE products SET quantity = quantity - :qtySold, lastSoldTimestamp = :soldTime WHERE id = :productId AND :qtySold > 0 AND quantity >= :qtySold")
     suspend fun decrementStockSafe(productId: Long, qtySold: Int, soldTime: Long): Int
 
-    @Query("UPDATE products SET quantity = quantity + :qtyToAdd WHERE id = :productId")
+    @Query("UPDATE products SET quantity = quantity + :qtyToAdd WHERE id = :productId AND :qtyToAdd > 0")
     suspend fun incrementStock(productId: Long, qtyToAdd: Int)
 
     // --- Audit Logs ---
