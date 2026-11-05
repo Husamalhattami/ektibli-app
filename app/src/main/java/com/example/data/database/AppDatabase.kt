@@ -25,7 +25,7 @@ import com.example.data.model.*
         AuditLogRecord::class,
         StoreSettings::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -75,6 +75,12 @@ abstract class AppDatabase : RoomDatabase() {
                         `isManagerRole` INTEGER NOT NULL
                     )
                 """.trimIndent())
+            }
+        }
+
+        private val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE sales ADD COLUMN invoiceNumber TEXT NOT NULL DEFAULT ''")
             }
         }
 

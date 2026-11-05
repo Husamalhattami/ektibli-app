@@ -17,7 +17,7 @@ object BackupManager {
     suspend fun createBackupFile(context: Context, repository: StoreRepository): File {
         val root = JSONObject()
         root.put("app", "HesabiStore")
-        root.put("version", 6)
+        root.put("version", 7)
         root.put("timestamp", System.currentTimeMillis())
 
         // 1. Products
@@ -74,6 +74,7 @@ object BackupManager {
                 put("employeeName", s.employeeName)
                 put("timestamp", s.timestamp)
                 put("unit", s.unit)
+                put("invoiceNumber", s.invoiceNumber)
             }
             salesArray.put(obj)
         }

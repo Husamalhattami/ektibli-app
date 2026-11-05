@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.ExchangeAccount
+import com.example.data.model.PaymentMethods
+import com.example.data.model.SaleLineInput
 import com.example.data.model.ProductItem
 import com.example.ui.StoreViewModel
 import com.example.ui.theme.*
@@ -132,47 +134,32 @@ fun SaleScreen(
             viewModel.showMessage("يرجى كتابة اسم العميل لتسجيل فاتورة الآجل.")
             return
         }
-        if (paymentType == "تحويل عبر الصراف" && selectedExchangeAccount == null) {
+        if ((PaymentMethods.isTransfer(paymentType) || PaymentMethods.isSplit(paymentType)) && selectedExchangeAccount == null) {
             viewModel.showMessage("يرجى اختيار حساب الصراف أو المحفظة.")
             return
         }
 
-        // Execute sale for each item in transaction
-        var errorOccurred = false
         val finalCustomer = customerName.ifBlank { "زبون نقدي" }
-
-        // Process all items
         val itemsSnapshot = cartItems.toList()
-        for (item in itemsSnapshot) {
-            val itemProportion = if (subtotal > 0) (item.unitPrice * item.quantity) / subtotal else 1.0
-            val itemDiscount = discountValue * itemProportion
-
-            viewModel.executeSale(
-                product = item.product,
-                quantity = item.quantity,
-                sellPrice = item.unitPrice,
-                discount = itemDiscount,
-                customerName = finalCustomer,
-                customerPhone = customerPhone,
-                paymentType = paymentType,
-                employee = null,
-                unit = item.unit,
-                cashPart = if (paymentType == "نصف كاش ونصف حوالة") totalAmount / 2 else 0.0,
-                transferPart = if (paymentType == "نصف كاش ونصف حوالة") totalAmount / 2 else 0.0,
-                exchangeAccount = selectedExchangeAccount,
-                transferRef = ""
-            ) {
-                // Success per item
-            }
-        }
-
+        viewModel.executeSaleCart(
+            lines = itemsSnapshot.map { SaleLineInput(it.product, it.quantity, it.unitPrice, it.unit) },
+            discount = discountValue,
+            customerName = finalCustomer,
+            customerPhone = customerPhone,
+            paymentType = paymentType,
+            employee = null,
+            cashPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
+            transferPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
+            exchangeAccount = selectedExchangeAccount,
+            transferRef = ""
+        ) { savedSales ->
         if (andShare) {
             val invoiceText = InvoiceHelper.generateThermalReceiptText(
                 storeName = storeSettings?.storeName ?: "أزياء الأصالة",
                 phoneNumber = storeSettings?.phoneNumber ?: "0501234567",
                 address = storeSettings?.address ?: "صنعاء",
-                invoiceId = System.currentTimeMillis() % 10000,
-                timestamp = System.currentTimeMillis(),
+                invoiceId = savedSales.first().id,
+                timestamp = savedSales.first().timestamp,
                 customerName = finalCustomer,
                 cashierName = "المدير",
                 items = itemsSnapshot.map { it.product.modelName to Triple(it.quantity, it.unitPrice, it.unitPrice * it.quantity) },
@@ -185,10 +172,10 @@ fun SaleScreen(
             InvoiceHelper.shareInvoiceText(context, invoiceText)
         }
 
-        cartItems.clear()
-        discountValue = 0.0
-        viewModel.showMessage("تم حفظ الفاتورة بنجاح!")
-        onBack()
+            cartItems.clear()
+            discountValue = 0.0
+            onBack()
+        }
     }
 
     Scaffold(
