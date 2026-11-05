@@ -567,33 +567,34 @@ class StoreRepository(
     // --- Delete / Reverse Sale ---
     suspend fun deleteSale(saleId: Long) {
         runInTransaction {
-            val sale = dao.getSaleById(saleId) ?: return@runInTransaction
-
-            // 1. Safely restore stock back
-            dao.incrementStock(sale.productId, sale.quantity)
-
-            // 2. Reverse cash movements
-            dao.deleteCashMovementsForSale(saleId)
-
-            // 3. Reverse exchange transfer if any
-            if (sale.transferAmount > 0 && sale.exchangeAccountId > 0) {
-                dao.updateExchangeBalance(sale.exchangeAccountId, -sale.transferAmount)
+            val selectedSale = dao.getSaleById(saleId) ?: return@runInTransaction
+            val invoiceSales = if (selectedSale.invoiceNumber.isBlank()) {
+                listOf(selectedSale)
+            } else {
+                dao.getSalesByInvoiceNumber(selectedSale.invoiceNumber).ifEmpty { listOf(selectedSale) }
             }
 
-            // 4. Reverse debt if this was debt sale
-            val debt = dao.getDebtBySaleId(saleId)
-            if (debt != null) {
-                dao.deleteDebt(debt.id)
+            // A multi-item invoice is one accounting operation: reverse every line first.
+            invoiceSales.forEach { sale ->
+                check(dao.incrementStock(sale.productId, sale.quantity).let { true })
+                dao.deleteCashMovementsForSale(sale.id)
             }
+            invoiceSales
+                .filter { it.transferAmount > 0 && it.exchangeAccountId > 0 }
+                .groupBy { it.exchangeAccountId }
+                .forEach { (accountId, lines) ->
+                    dao.updateExchangeBalance(accountId, -lines.sumOf { it.transferAmount })
+                }
 
-            // 5. Delete sale
-            dao.deleteSale(saleId)
+            val debt = dao.getDebtBySaleId(invoiceSales.first().id)
+            if (debt != null) dao.deleteDebt(debt.id)
+            invoiceSales.forEach { dao.deleteSale(it.id) }
 
             dao.insertAuditLog(
                 AuditLogRecord(
                     action = "إلغاء بيع",
                     actor = "المدير",
-                    details = "تم إلغاء فاتورة البيع #${sale.id} وإرجاع (${sale.quantity}) حبة لمخزون (${sale.productName})",
+                    details = "تم إلغاء الفاتورة ${selectedSale.invoiceNumber.ifBlank { "#${selectedSale.id}" }} وعدد بنودها ${invoiceSales.size}",
                     timestamp = System.currentTimeMillis()
                 )
             )

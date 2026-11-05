@@ -100,7 +100,7 @@ object InvoiceHelper {
             appendLine("       $address")
             appendLine("        هاتف: $phone")
             appendLine("════════════════════════════════")
-            appendLine("فاتورة مبيعات: #${sale.id}")
+            appendLine("فاتورة مبيعات: #${sale.invoiceNumber.ifBlank { sale.id.toString() }}")
             appendLine("التاريخ: $dateStr  |  الوقت: $timeStr")
             appendLine("العميل: ${sale.customerName.ifBlank { "زبون نقدي" }}")
             if (sale.customerPhone.isNotBlank()) {
@@ -212,7 +212,7 @@ object InvoiceHelper {
         // Invoice Meta
         mutedPaint.textAlign = Paint.Align.LEFT
         boldPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("فاتورة رقم: #${sale.id}", 390f, y, boldPaint)
+        canvas.drawText("فاتورة رقم: #${sale.invoiceNumber.ifBlank { sale.id.toString() }}", 390f, y, boldPaint)
         canvas.drawText("${FormatUtils.formatDate(sale.timestamp)} - ${FormatUtils.formatTime(sale.timestamp)}", 30f, y, mutedPaint)
         y += 18f
 
@@ -290,7 +290,7 @@ object InvoiceHelper {
 
         val invoicesDir = File(context.cacheDir, "invoices")
         if (!invoicesDir.exists()) invoicesDir.mkdirs()
-        val file = File(invoicesDir, "فاتورة_${sale.id}.pdf")
+        val file = File(invoicesDir, "فاتورة_${sale.invoiceNumber.ifBlank { sale.id.toString() }}.pdf")
         FileOutputStream(file).use { out ->
             pdfDocument.writeTo(out)
         }

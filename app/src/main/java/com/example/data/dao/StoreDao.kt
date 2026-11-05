@@ -38,6 +38,8 @@ interface StoreDao {
 
     @Query("SELECT * FROM sales WHERE id = :id")
     suspend fun getSaleById(id: Long): SaleTransaction?
+    @Query("SELECT * FROM sales WHERE invoiceNumber = :invoiceNumber ORDER BY id ASC")
+    suspend fun getSalesByInvoiceNumber(invoiceNumber: String): List<SaleTransaction>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSale(sale: SaleTransaction): Long

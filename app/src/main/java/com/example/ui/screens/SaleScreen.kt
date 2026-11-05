@@ -150,11 +150,14 @@ fun SaleScreen(
             customerPhone = customerPhone,
             paymentType = paymentType,
             employee = selectedEmployee,
-            cashPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
-            transferPart = if (PaymentMethods.isSplit(paymentType)) totalAmount / 2 else 0.0,
+            cashPart = if (PaymentMethods.isSplit(paymentType)) cashPaidAmount else 0.0,
+            transferPart = if (PaymentMethods.isSplit(paymentType)) transferPaidAmount else 0.0,
             exchangeAccount = selectedExchangeAccount,
             transferRef = ""
         ) { savedSales ->
+        if (andPrint) {
+            InvoiceHelper.printInvoiceDirect(context, savedSales.first(), storeSettings)
+        }
         if (andShare) {
             val invoiceText = InvoiceHelper.generateThermalReceiptText(
                 storeName = storeSettings?.storeName ?: "أزياء الأصالة",
@@ -550,6 +553,32 @@ fun SaleScreen(
                                     )
                                 }
                             }
+                        }
+
+                        if (PaymentMethods.isSplit(paymentType)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(
+                                    value = if (cashPaidAmount == 0.0) "" else cashPaidAmount.toString(),
+                                    onValueChange = { cashPaidAmount = it.toDoubleOrNull() ?: 0.0 },
+                                    label = { Text("الكاش") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                                OutlinedTextField(
+                                    value = if (transferPaidAmount == 0.0) "" else transferPaidAmount.toString(),
+                                    onValueChange = { transferPaidAmount = it.toDoubleOrNull() ?: 0.0 },
+                                    label = { Text("التحويل") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                            }
+                            Text(
+                                text = "المتبقي للتوزيع: ${FormatUtils.formatCurrency(totalAmount - cashPaidAmount - transferPaidAmount)}",
+                                color = if (kotlin.math.abs(totalAmount - cashPaidAmount - transferPaidAmount) <= 0.01) Color(0xFF15803D) else Color(0xFFB91C1C),
+                                fontSize = 12.sp
+                            )
                         }
 
                         // Exchange Account Selector if transfer
